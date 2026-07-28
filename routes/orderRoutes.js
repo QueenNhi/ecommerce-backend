@@ -6,6 +6,7 @@ const {
     getOrderById,
     getAllOrders,
     updateOrderStatus,
+    updatePaymentStatus,
     getUserOrders
 } = require("../controllers/orderController");
 
@@ -21,6 +22,9 @@ router.get("/user/:userId", getUserOrders);
 
 // PUT /api/orders/:id/status - Update order status
 router.put("/:id/status", updateOrderStatus);
+
+// PUT /api/orders/:id/payment-status - Update payment status (Admin/Staff)
+router.put("/:id/payment-status", updatePaymentStatus);
 
 // GET /api/orders/:id - Get order by ID
 router.get("/:id", getOrderById);

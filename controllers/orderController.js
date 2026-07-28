@@ -1,4 +1,12 @@
 const db = require("../config/db");
+const {
+    sendOrderCreatedEmail,
+    sendPaymentSuccessEmail,
+    sendOrderConfirmedEmail,
+    sendOrderShippingEmail,
+    sendOrderCompletedEmail,
+    sendOrderCancelledEmail
+} = require("../services/emailService");
 
 // ======================================
 // CREATE ORDER
@@ -23,12 +31,38 @@ const createOrder = async (req, res) => {
             });
         }
 
-        const userId = user_id || 1;
+        // Sanitize & validate user_id to ensure it is ALWAYS an INTEGER for PostgreSQL orders.user_id
+        console.log("🛒 createOrder Debug — incoming raw user_id:", user_id, "type:", typeof user_id);
+
+        let numericUserId = parseInt(user_id, 10);
+
+        if (isNaN(numericUserId) || numericUserId <= 0) {
+            console.warn(`⚠️ Warning: non-integer user_id received ('${user_id}'). Resolving integer user.id from PostgreSQL database...`);
+            const targetEmail = String(email || "").toLowerCase().trim();
+            if (targetEmail) {
+                const userCheck = await db.query("SELECT id FROM users WHERE email = $1", [targetEmail]);
+                if (userCheck.rows.length > 0) {
+                    numericUserId = Number(userCheck.rows[0].id);
+                } else {
+                    const newUser = await db.query(
+                        `INSERT INTO users (fullname, email, phone, password, role, status, avatar, address)
+                         VALUES ($1, $2, $3, '', 'customer', 'active', '', '')
+                         RETURNING id`,
+                        [fullname || "Customer", targetEmail, phone || ""]
+                    );
+                    numericUserId = Number(newUser.rows[0].id);
+                }
+            } else {
+                numericUserId = 1;
+            }
+        }
+
+        console.log("✅ Verified PostgreSQL numericUserId for order insertion:", numericUserId, "type:", typeof numericUserId);
 
         // 1. Get user cart
         const cartResult = await db.query(
-            "SELECT id FROM cart WHERE user_id = $1",
-            [userId]
+            "SELECT id FROM cart WHERE user_id = $1 OR user_id = $2",
+            [String(user_id), String(numericUserId)]
         );
 
         if (cartResult.rows.length === 0) {
@@ -48,6 +82,7 @@ const createOrder = async (req, res) => {
                 cart_items.color_id,
                 cart_items.size_id,
                 cart_items.quantity,
+                products.name,
                 products.price
             FROM cart_items
             JOIN products ON cart_items.product_id = products.id
@@ -72,15 +107,16 @@ const createOrder = async (req, res) => {
         );
 
         const fullAddress = `${address}`;
+        const initialPaymentStatus = payment_method === "vnpay" ? "unpaid" : (payment_method === "bank_transfer" ? "unpaid" : "unpaid");
 
-        // 4. Insert order
+        // 4. Insert order using numericUserId (INTEGER)
         const orderResult = await db.query(
             `
-            INSERT INTO orders (user_id, fullname, phone, address, note, total_price, payment_method, order_status, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', NOW())
-            RETURNING id, fullname, phone, address, total_price, payment_method, created_at
+            INSERT INTO orders (user_id, fullname, phone, address, note, total_price, payment_method, payment_status, order_status, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', NOW())
+            RETURNING id, user_id, fullname, phone, address, total_price, payment_method, payment_status, created_at
             `,
-            [userId, fullname, phone, fullAddress, note, totalPrice, payment_method]
+            [numericUserId, fullname, phone, fullAddress, note, totalPrice, payment_method, initialPaymentStatus]
         );
 
         const order = orderResult.rows[0];
@@ -101,6 +137,13 @@ const createOrder = async (req, res) => {
             "DELETE FROM cart_items WHERE cart_id = $1",
             [cartId]
         );
+
+        // Fetch user email for email notification
+        const userRes = await db.query("SELECT id, fullname, email FROM users WHERE id = $1", [numericUserId]);
+        const userObj = userRes.rows[0] || { email: email || phone, fullname };
+
+        // Trigger Order Placed Email Notification
+        sendOrderCreatedEmail(userObj, order, items);
 
         res.status(201).json({
             success: true,
@@ -128,7 +171,7 @@ const getOrderById = async (req, res) => {
 
         const orderResult = await db.query(
             `
-            SELECT id, user_id, fullname, phone, address, note, total_price, payment_method, order_status, created_at
+            SELECT id, user_id, fullname, phone, address, note, total_price, payment_method, payment_status, order_status, created_at
             FROM orders
             WHERE id = $1
             `,
@@ -197,6 +240,7 @@ const getAllOrders = async (req, res) => {
                 orders.note,
                 orders.total_price,
                 orders.payment_method,
+                orders.payment_status,
                 orders.order_status,
                 orders.created_at,
                 COALESCE(SUM(order_items.quantity), 0) AS total_items
@@ -221,7 +265,7 @@ const getAllOrders = async (req, res) => {
 };
 
 // ======================================
-// UPDATE ORDER STATUS (ADMIN)
+// UPDATE ORDER STATUS (ADMIN / STAFF)
 // PUT /api/orders/:id/status
 // ======================================
 const updateOrderStatus = async (req, res) => {
@@ -230,7 +274,9 @@ const updateOrderStatus = async (req, res) => {
         const { status } = req.body;
 
         const validStatuses = ["pending", "processing", "shipping", "completed", "cancelled"];
-        if (!status || !validStatuses.includes(status.toLowerCase())) {
+        const lowerStatus = String(status || "").toLowerCase().trim();
+
+        if (!status || !validStatuses.includes(lowerStatus)) {
             return res.status(400).json({
                 success: false,
                 message: "Trạng thái đơn hàng không hợp lệ."
@@ -242,9 +288,9 @@ const updateOrderStatus = async (req, res) => {
             UPDATE orders
             SET order_status = $1
             WHERE id = $2
-            RETURNING id, order_status
+            RETURNING id, user_id, fullname, phone, address, total_price, payment_method, payment_status, order_status
             `,
-            [status.toLowerCase(), id]
+            [lowerStatus, id]
         );
 
         if (result.rows.length === 0) {
@@ -254,16 +300,81 @@ const updateOrderStatus = async (req, res) => {
             });
         }
 
+        const updatedOrder = result.rows[0];
+
+        // Fetch user email for trigger notification
+        const userRes = await db.query("SELECT id, fullname, email FROM users WHERE id = $1", [updatedOrder.user_id]);
+        const userObj = userRes.rows[0] || { email: updatedOrder.phone, fullname: updatedOrder.fullname };
+
+        // Email Trigger based on order status change
+        if (lowerStatus === "processing") sendOrderConfirmedEmail(userObj, updatedOrder);
+        else if (lowerStatus === "shipping") sendOrderShippingEmail(userObj, updatedOrder);
+        else if (lowerStatus === "completed") sendOrderCompletedEmail(userObj, updatedOrder);
+        else if (lowerStatus === "cancelled") sendOrderCancelledEmail(userObj, updatedOrder);
+
         res.json({
             success: true,
-            message: `Cập nhật trạng thái đơn hàng thành '${status}' thành công!`,
-            order: result.rows[0]
+            message: `Cập nhật trạng thái đơn hàng thành '${lowerStatus}' thành công!`,
+            order: updatedOrder
         });
     } catch (err) {
         console.error("Update order status error:", err);
         res.status(500).json({
             success: false,
             message: err.message || "Lỗi cập nhật trạng thái đơn hàng."
+        });
+    }
+};
+
+// ======================================
+// UPDATE PAYMENT STATUS (ADMIN / MANUAL BANK VERIFICATION)
+// PUT /api/orders/:id/payment-status
+// ======================================
+const updatePaymentStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { payment_status = "paid" } = req.body;
+
+        const result = await db.query(
+            `
+            UPDATE orders
+            SET payment_status = $1,
+                order_status = CASE WHEN $1 = 'paid' AND order_status = 'pending' THEN 'processing' ELSE order_status END
+            WHERE id = $2
+            RETURNING id, user_id, fullname, phone, address, total_price, payment_method, payment_status, order_status
+            `,
+            [payment_status.toLowerCase(), id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy đơn hàng."
+            });
+        }
+
+        const order = result.rows[0];
+
+        // Fetch user email for trigger notification
+        const userRes = await db.query("SELECT id, fullname, email FROM users WHERE id = $1", [order.user_id]);
+        const userObj = userRes.rows[0] || { email: order.phone, fullname: order.fullname };
+
+        if (payment_status.toLowerCase() === "paid") {
+            sendPaymentSuccessEmail(userObj, order);
+            sendOrderConfirmedEmail(userObj, order);
+        }
+
+        res.json({
+            success: true,
+            message: `Cập nhật trạng thái thanh toán thành '${payment_status}' thành công!`,
+            order
+        });
+
+    } catch (err) {
+        console.error("Update payment status error:", err);
+        res.status(500).json({
+            success: false,
+            message: err.message || "Lỗi cập nhật trạng thái thanh toán."
         });
     }
 };
@@ -281,6 +392,7 @@ const getUserOrders = async (req, res) => {
                 orders.id,
                 orders.total_price,
                 orders.payment_method,
+                orders.payment_status,
                 orders.order_status,
                 orders.created_at,
                 COALESCE(SUM(order_items.quantity), 0) AS total_items
@@ -311,5 +423,6 @@ module.exports = {
     getOrderById,
     getAllOrders,
     updateOrderStatus,
+    updatePaymentStatus,
     getUserOrders
 };

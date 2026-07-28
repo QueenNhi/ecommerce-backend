@@ -56,6 +56,10 @@ app.use("/api/auth", authRoutes);
 const adminRoutes = require("./routes/adminRoutes");
 app.use("/api/admin", adminRoutes);
 
+// Payment Routes (VNPAY & Banking)
+const paymentRoutes = require("./routes/paymentRoutes");
+app.use("/api/payment", paymentRoutes);
+
 // Admin Promotions & Reviews
 const promotionRoutes = require("./routes/promotionRoutes");
 app.use("/api/admin/promotions", promotionRoutes);
