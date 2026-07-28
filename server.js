@@ -71,6 +71,10 @@ app.use("/api/admin/settings", settingsRoutes);
 const collectionRoutes = require("./routes/collectionRoutes");
 app.use("/api/admin/collections", collectionRoutes);
 
+// Admin Staff Management
+const staffRoutes = require("./routes/staffRoutes");
+app.use("/api/admin/staff", staffRoutes);
+
 // =====================================
 // 404
 // =====================================
