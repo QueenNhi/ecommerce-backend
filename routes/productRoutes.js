@@ -22,13 +22,9 @@ const { getProductReviews, addProductReview } = require("../controllers/reviewCo
 // ================= HOME =================
 router.get("/", getProducts);
 
-// ================= SHOP =================
+// ================= SHOP (Đưa các route tĩnh lên TRƯỚC :id) =================
 router.get("/all", getAllProducts);
-
-// FilterProducts
 router.get("/filter", filterProducts);
-
-// ================= EXPORT =================
 router.get("/export", exportProducts);
 
 // ================= CREATE =================
@@ -37,6 +33,17 @@ router.post(
     upload.single("image"),
     createProduct
 );
+
+// ================= PRODUCT DETAIL & SUB-ROUTES =================
+// Đưa các route có chứa /:id/ xuống PHÍA DƯỚI các route tĩnh
+router.get("/:id/images", getProductImages);
+router.get("/:id/colors", getProductColors);
+router.get("/:id/sizes", getProductSizes);
+router.get("/:id/reviews", getProductReviews);
+router.post("/:id/reviews", addProductReview);
+
+// Cuối cùng mới đến route get theo ID chung
+router.get("/:id", getProductById);
 
 // ================= UPDATE =================
 router.put(
@@ -47,21 +54,5 @@ router.put(
 
 // ================= DELETE =================
 router.delete("/:id", deleteProduct);
-
-// ================= PRODUCT REVIEWS =================
-router.get("/:productId/reviews", getProductReviews);
-router.post("/:productId/reviews", addProductReview);
-
-// ================= PRODUCT IMAGES =================
-router.get("/:id/images", getProductImages);
-
-// ================= PRODUCT COLORS =================
-router.get("/:id/colors", getProductColors);
-
-// ================= PRODUCT SIZES =================
-router.get("/:id/sizes", getProductSizes);
-
-// ================= PRODUCT DETAIL =================
-router.get("/:id", getProductById);
 
 module.exports = router;
