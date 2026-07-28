@@ -9,10 +9,10 @@ const brandRoutes = require("./routes/brandRoutes");
 const authRoutes = require("./routes/authRoutes");
 
 // 🌟 1. BẠN PHẢI IMPORT FILE aiRoutes VÀO ĐÂY (Mình vừa thêm dòng này):
-const aiRoutes = require("./routes/aiRoutes"); 
+const aiRoutes = require("./routes/aiRoutes");
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // =====================================
 // MIDDLEWARE
@@ -43,7 +43,7 @@ app.use("/api/brands", brandRoutes);
 app.use("/api/admin/brands", brandRoutes);
 
 // 🌟 2. BẠN PHẢI ĐĂNG KÝ ĐƯỜNG DẪN /api/ai VÀO ĐÂY (Mình vừa thêm dòng này):
-app.use("/api/ai", aiRoutes); 
+app.use("/api/ai", aiRoutes);
 
 const orderRoutes = require("./routes/orderRoutes");
 app.use("/api/orders", orderRoutes);
@@ -82,18 +82,20 @@ app.use("/api/admin/staff", staffRoutes);
 // =====================================
 // 404
 // =====================================
-app.use((req,res)=>{
+app.use((req, res) => {
     res.status(404).json({
-        success:false,
-        message:"API Not Found"
+        success: false,
+        message: "API Not Found"
     });
 });
 
 // =====================================
 // SERVER
 // =====================================
-app.listen(PORT,()=>{
-    console.log(
-        `🚀 Server running at http://localhost:${PORT}`
-    );
+app.listen(PORT, () => {
+    if (process.env.NODE_ENV === "production") {
+        console.log(`🚀 Server running on port ${PORT}`);
+    } else {
+        console.log(`🚀 Server running at http://localhost:${PORT}`);
+    }
 });
