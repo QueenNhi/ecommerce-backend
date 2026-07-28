@@ -8,7 +8,7 @@ const categoryRoutes = require("./routes/categoryRoutes");
 const brandRoutes = require("./routes/brandRoutes");
 const authRoutes = require("./routes/authRoutes");
 
-// 🌟 1. BẠN PHẢI IMPORT FILE aiRoutes VÀO ĐÂY (Mình vừa thêm dòng này):
+// 🌟 1. IMPORT FILE aiRoutes
 const aiRoutes = require("./routes/aiRoutes");
 
 const app = express();
@@ -20,7 +20,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({
     origin: "*",
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "x-user-role"] // <--- Đã thêm x-user-role vào đây
 }));
 
 app.use(express.json());
@@ -66,7 +66,7 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/brands", brandRoutes);
 app.use("/api/admin/brands", brandRoutes);
 
-// 🌟 2. BẠN PHẢI ĐĂNG KÝ ĐƯỜNG DẪN /api/ai VÀO ĐÂY (Mình vừa thêm dòng này):
+// 🌟 2. ĐĂNG KÝ ĐƯỜNG DẪN /api/ai
 app.use("/api/ai", aiRoutes);
 
 const orderRoutes = require("./routes/orderRoutes");
