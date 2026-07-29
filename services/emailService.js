@@ -13,22 +13,49 @@ console.log(`📧 Nodemailer SMTP initialized — Host: ${smtpHost}:${smtpPort},
 const transporter = nodemailer.createTransport({
     host: smtpHost,
     port: smtpPort,
-    secure: smtpPort === 465, // true for 465, false for 587
+    secure: smtpPort === 465,
     auth: {
         user: smtpUser,
         pass: smtpPass
     },
+
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 30000,
+
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
+
     tls: {
         rejectUnauthorized: false
     }
 });
+
+transporter.verify((err, success) => {
+    console.log("====================================");
+    console.log("📧 SMTP VERIFY");
+    console.log("Host:", smtpHost);
+    console.log("Port:", smtpPort);
+    console.log("User:", smtpUser);
+
+    if (err) {
+        console.error("❌ SMTP VERIFY FAILED");
+        console.error(err);
+    } else {
+        console.log("✅ SMTP READY");
+    }
+
+    console.log("====================================");
+});
+
 
 /**
  * Generates luxury responsive HTML email layout
  */
 const buildLuxuryEmailTemplate = ({ title, subtitle, bodyContentHtml, ctaUrl, ctaText }) => {
     const year = new Date().getFullYear();
-    const siteUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     return `
     <!DOCTYPE html>
@@ -89,46 +116,58 @@ const buildLuxuryEmailTemplate = ({ title, subtitle, bodyContentHtml, ctaUrl, ct
  * Generic mail sender (safe, non-blocking with detailed diagnosis)
  */
 const sendMail = async ({ to, subject, html }) => {
-    if (!to || typeof to !== "string" || !to.includes("@")) {
-        console.log(`⚠️ Email skipped: invalid recipient address (${to})`);
-        return;
+    if (!to || !to.includes("@")) {
+        console.log("⚠️ Invalid email:", to);
+        return false;
     }
 
-    if (!smtpUser || !smtpPass || smtpPass === "app-password") {
-        console.warn(`⚠️ [SMTP CONFIG WARNING] Gmail SMTP App Password is not set or using default placeholder in .env (SMTP_USER/SMTP_PASS). Email to ${to} was skipped safely.`);
-        return;
+    if (!smtpUser || !smtpPass) {
+        console.log("❌ SMTP chưa cấu hình.");
+        return false;
     }
 
     try {
+
+        // Test SMTP trước
+        await transporter.verify();
+        console.log("✅ SMTP Connected");
+
         const info = await transporter.sendMail({
             from: defaultFrom,
             to,
             subject,
             html
         });
-        console.log(`✉️ [EMAIL SUCCESS] Sent to ${to}: ${info.messageId}`);
-        return info;
+
+        console.log("======================================");
+        console.log("📧 EMAIL SENT SUCCESS");
+        console.log("To:", to);
+        console.log("Subject:", subject);
+        console.log("MessageId:", info.messageId);
+        console.log("======================================");
+
+        return true;
+
     } catch (err) {
-        if (err.code === "EAUTH" || err.responseCode === 535 || (err.message && err.message.includes("535"))) {
-            console.error(`❌ [Gmail SMTP 535 Invalid Login Error]: Gmail rejected username (${smtpUser}) or password.`);
-            console.error(`📌 HUỚNG DẪN SỬA LỖI GMAIL SMTP:`);
-            console.error(`1. Bật Xác minh 2 bước (2-Step Verification) trên tài khoản Google: ${smtpUser}`);
-            console.error(`2. Truy cập https://myaccount.google.com/apppasswords`);
-            console.error(`3. Tạo "Mật khẩu ứng dụng" (App Password 16 ký tự, ví dụ: 'abcd efgh ijkl mnop')`);
-            console.error(`4. Cập nhật vào file .env: SMTP_PASS=abcdefghijklmnop (hoặc EMAIL_PASS=abcdefghijklmnop)`);
-        } else {
-            console.error(`⚠️ Email send error to ${to}:`, err.message);
-        }
+
+        console.log("======================================");
+        console.log("❌ EMAIL SEND FAILED");
+        console.log("Code:", err.code);
+        console.log("Command:", err.command);
+        console.log("Message:", err.message);
+        console.log("Response:", err.response);
+        console.log("======================================");
+
+        return false;
     }
 };
-
 // ======================================
 // 1. REGISTER WELCOME EMAIL
 // ======================================
 const sendWelcomeEmail = async (user) => {
     const title = "Chào Mừng Quý Khách Đã Đăng Ký Tài Khoản";
     const subtitle = "Khám phá di sản nghệ thuật may túi xách thủ công độc bản";
-    const siteUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${user.fullname || "Quý khách"}</strong>,</p>
@@ -157,7 +196,7 @@ const sendWelcomeEmail = async (user) => {
 const sendForgotPasswordEmail = async (user, resetToken) => {
     const title = "Yêu Cầu Đặt Lại Mật Khẩu";
     const subtitle = "Liên kết có hiệu lực trong vòng 60 phút";
-    const siteUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
     const resetUrl = `${siteUrl}/reset-password?token=${resetToken}`;
 
     const bodyContentHtml = `
@@ -188,7 +227,7 @@ const sendForgotPasswordEmail = async (user, resetToken) => {
 const sendPasswordResetSuccessEmail = async (user) => {
     const title = "Mật Khẩu Đã Đổi Thành Công";
     const subtitle = "Tài khoản của bạn đã được cập nhật mật khẩu mới";
-    const siteUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${user.fullname || "Quý khách"}</strong>,</p>
@@ -217,7 +256,7 @@ const sendPasswordResetSuccessEmail = async (user) => {
 const sendOrderCreatedEmail = async (user, order, items = []) => {
     const title = `Đặt Hàng Thành Công #${order.id}`;
     const subtitle = "Cảm ơn bạn đã tin tưởng lựa chọn Heritage Luxury";
-    const siteUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     let itemsRows = items.map(item => `
         <tr>
@@ -270,7 +309,7 @@ const sendOrderCreatedEmail = async (user, order, items = []) => {
 const sendPaymentSuccessEmail = async (user, order) => {
     const title = `Thanh Toán Thành Công #${order.id}`;
     const subtitle = "Đơn hàng của bạn đã được thanh toán hoàn tất";
-    const siteUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${order.fullname || user?.fullname}</strong>,</p>
@@ -301,7 +340,7 @@ const sendPaymentSuccessEmail = async (user, order) => {
 const sendOrderConfirmedEmail = async (user, order) => {
     const title = `Đơn Hàng #${order.id} Đã Được Xác Nhận`;
     const subtitle = "Đang tiến hành chuẩn bị và kiểm định chất lượng";
-    const siteUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${order.fullname || user?.fullname}</strong>,</p>
@@ -329,7 +368,7 @@ const sendOrderConfirmedEmail = async (user, order) => {
 const sendOrderShippingEmail = async (user, order) => {
     const title = `Đơn Hàng #${order.id} Đang Được Giao`;
     const subtitle = "Sản phẩm đang trên đường tới địa chỉ của bạn";
-    const siteUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${order.fullname || user?.fullname}</strong>,</p>
@@ -358,7 +397,7 @@ const sendOrderShippingEmail = async (user, order) => {
 const sendOrderCompletedEmail = async (user, order) => {
     const title = `Giao Hàng Hoàn Tất #${order.id}`;
     const subtitle = "Cảm ơn quý khách đã trải nghiệm sản phẩm của Heritage Luxury";
-    const siteUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${order.fullname || user?.fullname}</strong>,</p>
@@ -387,7 +426,7 @@ const sendOrderCompletedEmail = async (user, order) => {
 const sendOrderCancelledEmail = async (user, order) => {
     const title = `Đơn Hàng #${order.id} Đã Bị Hủy`;
     const subtitle = "Thông báo trạng thái đơn hàng của quý khách";
-    const siteUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${order.fullname || user?.fullname}</strong>,</p>
