@@ -11,9 +11,12 @@ console.log(`📧 Nodemailer SMTP initialized — Host: ${smtpHost}:${smtpPort},
 
 // Configure Transporter with Gmail SMTP
 const transporter = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure: smtpPort === 465,
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+
+    family: 4, // Ép dùng IPv4
+
     auth: {
         user: smtpUser,
         pass: smtpPass
@@ -23,15 +26,10 @@ const transporter = nodemailer.createTransport({
     greetingTimeout: 30000,
     socketTimeout: 30000,
 
-    pool: true,
-    maxConnections: 5,
-    maxMessages: 100,
-
     tls: {
         rejectUnauthorized: false
     }
 });
-
 transporter.verify((err, success) => {
     console.log("====================================");
     console.log("📧 SMTP VERIFY");
