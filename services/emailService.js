@@ -1,6 +1,8 @@
 require("dotenv").config();
 const nodemailer = require("nodemailer");
 
+const SITE_URL = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
+
 const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
 const smtpPort = Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 587;
 const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER || "";
@@ -26,10 +28,16 @@ const transporter = nodemailer.createTransport({
     greetingTimeout: 30000,
     socketTimeout: 30000,
 
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
+
     tls: {
         rejectUnauthorized: false
     }
 });
+
+// Verify SMTP Connection ONCE on Startup
 transporter.verify((err, success) => {
     console.log("====================================");
     console.log("📧 SMTP VERIFY");
@@ -47,13 +55,11 @@ transporter.verify((err, success) => {
     console.log("====================================");
 });
 
-
 /**
  * Generates luxury responsive HTML email layout
  */
 const buildLuxuryEmailTemplate = ({ title, subtitle, bodyContentHtml, ctaUrl, ctaText }) => {
     const year = new Date().getFullYear();
-    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     return `
     <!DOCTYPE html>
@@ -102,7 +108,7 @@ const buildLuxuryEmailTemplate = ({ title, subtitle, bodyContentHtml, ctaUrl, ct
             </div>
             <div class="footer">
                 <p>&copy; ${year} Heritage Luxury Portfolio. All rights reserved.</p>
-                <p>Khám phá sản phẩm cao cấp tại <a href="${siteUrl}">${siteUrl}</a></p>
+                <p>Khám phá sản phẩm cao cấp tại <a href="${SITE_URL}">${SITE_URL}</a></p>
             </div>
         </div>
     </body>
@@ -125,11 +131,6 @@ const sendMail = async ({ to, subject, html }) => {
     }
 
     try {
-
-        // Test SMTP trước
-        await transporter.verify();
-        console.log("✅ SMTP Connected");
-
         const info = await transporter.sendMail({
             from: defaultFrom,
             to,
@@ -147,25 +148,29 @@ const sendMail = async ({ to, subject, html }) => {
         return true;
 
     } catch (err) {
-
         console.log("======================================");
         console.log("❌ EMAIL SEND FAILED");
         console.log("Code:", err.code);
         console.log("Command:", err.command);
-        console.log("Message:", err.message);
+        console.log("Errno:", err.errno);
+        console.log("Address:", err.address);
+        console.log("Port:", err.port);
         console.log("Response:", err.response);
+        console.log("ResponseCode:", err.responseCode);
+        console.log("Message:", err.message);
+        console.log("Stack:", err.stack);
         console.log("======================================");
 
         return false;
     }
 };
+
 // ======================================
 // 1. REGISTER WELCOME EMAIL
 // ======================================
 const sendWelcomeEmail = async (user) => {
-    const title = "Chào Mừng Quý Khách Đã Đăng Ký Tài Khoản";
+    const title = "Chào Mừng Quý Khách Đăng Ký Tài Khoản";
     const subtitle = "Khám phá di sản nghệ thuật may túi xách thủ công độc bản";
-    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${user.fullname || "Quý khách"}</strong>,</p>
@@ -177,7 +182,7 @@ const sendWelcomeEmail = async (user) => {
         title,
         subtitle,
         bodyContentHtml,
-        ctaUrl: `${siteUrl}/products`,
+        ctaUrl: `${SITE_URL}/products`,
         ctaText: "Khám Phá Bộ Sưu Tập Ngay"
     });
 
@@ -194,8 +199,7 @@ const sendWelcomeEmail = async (user) => {
 const sendForgotPasswordEmail = async (user, resetToken) => {
     const title = "Yêu Cầu Đặt Lại Mật Khẩu";
     const subtitle = "Liên kết có hiệu lực trong vòng 60 phút";
-    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
-    const resetUrl = `${siteUrl}/reset-password?token=${resetToken}`;
+    const resetUrl = `${SITE_URL}/reset-password?token=${resetToken}`;
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${user.fullname || "Quý khách"}</strong>,</p>
@@ -225,7 +229,6 @@ const sendForgotPasswordEmail = async (user, resetToken) => {
 const sendPasswordResetSuccessEmail = async (user) => {
     const title = "Mật Khẩu Đã Đổi Thành Công";
     const subtitle = "Tài khoản của bạn đã được cập nhật mật khẩu mới";
-    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${user.fullname || "Quý khách"}</strong>,</p>
@@ -237,7 +240,7 @@ const sendPasswordResetSuccessEmail = async (user) => {
         title,
         subtitle,
         bodyContentHtml,
-        ctaUrl: `${siteUrl}/login`,
+        ctaUrl: `${SITE_URL}/login`,
         ctaText: "Đăng Nhập Ngay"
     });
 
@@ -248,13 +251,19 @@ const sendPasswordResetSuccessEmail = async (user) => {
     });
 };
 
+const extractOrderId = (order) => {
+    if (!order) return "";
+    if (typeof order === "number" || typeof order === "string") return order;
+    return order.id || order.order_id || order.orderId || "";
+};
+
 // ======================================
 // 4. ORDER CREATED EMAIL
 // ======================================
 const sendOrderCreatedEmail = async (user, order, items = []) => {
-    const title = `Đặt Hàng Thành Công #${order.id}`;
+    const orderId = extractOrderId(order);
+    const title = `Đặt Hàng Thành Công #${orderId}`;
     const subtitle = "Cảm ơn bạn đã tin tưởng lựa chọn Heritage Luxury";
-    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     let itemsRows = items.map(item => `
         <tr>
@@ -290,13 +299,13 @@ const sendOrderCreatedEmail = async (user, order, items = []) => {
         title,
         subtitle,
         bodyContentHtml,
-        ctaUrl: `${siteUrl}/orders/${order.id}`,
+        ctaUrl: `${SITE_URL}/orders/${orderId}`,
         ctaText: "Xem Chi Tiết Đơn Hàng"
     });
 
     return sendMail({
         to: user?.email || order.email,
-        subject: `[Heritage Luxury] 🛍️ Xác nhận đơn hàng #${order.id}`,
+        subject: `[Heritage Luxury] 🛍️ Xác nhận đơn hàng #${orderId}`,
         html
     });
 };
@@ -305,13 +314,13 @@ const sendOrderCreatedEmail = async (user, order, items = []) => {
 // 5. PAYMENT SUCCESS EMAIL
 // ======================================
 const sendPaymentSuccessEmail = async (user, order) => {
-    const title = `Thanh Toán Thành Công #${order.id}`;
+    const orderId = extractOrderId(order);
+    const title = `Thanh Toán Thành Công #${orderId}`;
     const subtitle = "Đơn hàng của bạn đã được thanh toán hoàn tất";
-    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${order.fullname || user?.fullname}</strong>,</p>
-        <p>Chúng tôi đã xác nhận thanh toán thành công cho đơn hàng <strong>#${order.id}</strong>.</p>
+        <p>Chúng tôi đã xác nhận thanh toán thành công cho đơn hàng <strong>#${orderId}</strong>.</p>
         <p><strong>Số tiền đã thanh toán:</strong> <span class="price-highlight">${Number(order.total_price).toLocaleString("vi-VN")} ₫</span></p>
         <p><strong>Phương thức:</strong> ${String(order.payment_method).toUpperCase()}</p>
         <p>Bộ phận chế tác và chuẩn bị hàng sẽ lập tức đóng gói hộp quà sản phẩm cho quý khách.</p>
@@ -321,13 +330,13 @@ const sendPaymentSuccessEmail = async (user, order) => {
         title,
         subtitle,
         bodyContentHtml,
-        ctaUrl: `${siteUrl}/orders/${order.id}`,
+        ctaUrl: `${SITE_URL}/orders/${orderId}`,
         ctaText: "Theo Dõi Đơn Hàng"
     });
 
     return sendMail({
         to: user?.email || order.email,
-        subject: `[Heritage Luxury] 💳 Xác nhận thanh toán thành công đơn hàng #${order.id}`,
+        subject: `[Heritage Luxury] 💳 Xác nhận thanh toán thành công đơn hàng #${orderId}`,
         html
     });
 };
@@ -336,26 +345,26 @@ const sendPaymentSuccessEmail = async (user, order) => {
 // 6. ORDER CONFIRMED EMAIL (PROCESSING)
 // ======================================
 const sendOrderConfirmedEmail = async (user, order) => {
-    const title = `Đơn Hàng #${order.id} Đã Được Xác Nhận`;
+    const orderId = extractOrderId(order);
+    const title = `Đơn Hàng #${orderId} Đã Được Xác Nhận`;
     const subtitle = "Đang tiến hành chuẩn bị và kiểm định chất lượng";
-    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${order.fullname || user?.fullname}</strong>,</p>
-        <p>Đơn hàng <strong>#${order.id}</strong> của bạn đã được đội ngũ quản lý xác nhận và đang chuyển sang giai đoạn chuẩn bị hàng.</p>
+        <p>Đơn hàng <strong>#${orderId}</strong> của bạn đã được đội ngũ quản lý xác nhận và đang chuyển sang giai đoạn chuẩn bị hàng.</p>
     `;
 
     const html = buildLuxuryEmailTemplate({
         title,
         subtitle,
         bodyContentHtml,
-        ctaUrl: `${siteUrl}/orders/${order.id}`,
+        ctaUrl: `${SITE_URL}/orders/${orderId}`,
         ctaText: "Xem Trạng Thái Đơn Hàng"
     });
 
     return sendMail({
         to: user?.email || order.email,
-        subject: `[Heritage Luxury] ✨ Đơn hàng #${order.id} đã được xác nhận`,
+        subject: `[Heritage Luxury] ✨ Đơn hàng #${orderId} đã được xác nhận`,
         html
     });
 };
@@ -364,13 +373,13 @@ const sendOrderConfirmedEmail = async (user, order) => {
 // 7. ORDER SHIPPING EMAIL
 // ======================================
 const sendOrderShippingEmail = async (user, order) => {
-    const title = `Đơn Hàng #${order.id} Đang Được Giao`;
+    const orderId = extractOrderId(order);
+    const title = `Đơn Hàng #${orderId} Đang Được Giao`;
     const subtitle = "Sản phẩm đang trên đường tới địa chỉ của bạn";
-    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${order.fullname || user?.fullname}</strong>,</p>
-        <p>Đơn hàng <strong>#${order.id}</strong> của bạn đã được giao cho đơn vị vận chuyển hỏa tốc.</p>
+        <p>Đơn hàng <strong>#${orderId}</strong> của bạn đã được giao cho đơn vị vận chuyển hỏa tốc.</p>
         <p><strong>Địa chỉ nhận hàng:</strong> ${order.address} (${order.phone})</p>
     `;
 
@@ -378,13 +387,13 @@ const sendOrderShippingEmail = async (user, order) => {
         title,
         subtitle,
         bodyContentHtml,
-        ctaUrl: `${siteUrl}/orders/${order.id}`,
+        ctaUrl: `${SITE_URL}/orders/${orderId}`,
         ctaText: "Kiểm Tra Lộ Trình Giao Hàng"
     });
 
     return sendMail({
         to: user?.email || order.email,
-        subject: `[Heritage Luxury] 🚚 Đơn hàng #${order.id} đang được vận chuyển`,
+        subject: `[Heritage Luxury] 🚚 Đơn hàng #${orderId} đang được vận chuyển`,
         html
     });
 };
@@ -393,13 +402,13 @@ const sendOrderShippingEmail = async (user, order) => {
 // 8. ORDER COMPLETED EMAIL
 // ======================================
 const sendOrderCompletedEmail = async (user, order) => {
-    const title = `Giao Hàng Hoàn Tất #${order.id}`;
+    const orderId = extractOrderId(order);
+    const title = `Giao Hàng Hoàn Tất #${orderId}`;
     const subtitle = "Cảm ơn quý khách đã trải nghiệm sản phẩm của Heritage Luxury";
-    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${order.fullname || user?.fullname}</strong>,</p>
-        <p>Đơn hàng <strong>#${order.id}</strong> của bạn đã được giao thành công.</p>
+        <p>Đơn hàng <strong>#${orderId}</strong> của bạn đã được giao thành công.</p>
         <p>Hy vọng bạn hài lòng với chất lượng da và sự tỉ mỉ trong từng đường nét chiếc túi xách của mình. Hãy để lại đánh giá trải nghiệm nhé!</p>
     `;
 
@@ -407,13 +416,13 @@ const sendOrderCompletedEmail = async (user, order) => {
         title,
         subtitle,
         bodyContentHtml,
-        ctaUrl: `${siteUrl}/product/${order.id}`,
-        ctaText: "Viết Đánh Giá Sản Phẩm"
+        ctaUrl: `${SITE_URL}/orders/${orderId}`,
+        ctaText: "Xem Chi Tiết Đơn Hàng"
     });
 
     return sendMail({
         to: user?.email || order.email,
-        subject: `[Heritage Luxury] 🎉 Giao hàng hoàn tất đơn hàng #${order.id}`,
+        subject: `[Heritage Luxury] 🎉 Giao hàng hoàn tất đơn hàng #${orderId}`,
         html
     });
 };
@@ -422,13 +431,13 @@ const sendOrderCompletedEmail = async (user, order) => {
 // 9. ORDER CANCELLED EMAIL
 // ======================================
 const sendOrderCancelledEmail = async (user, order) => {
-    const title = `Đơn Hàng #${order.id} Đã Bị Hủy`;
+    const orderId = extractOrderId(order);
+    const title = `Đơn Hàng #${orderId} Đã Bị Hủy`;
     const subtitle = "Thông báo trạng thái đơn hàng của quý khách";
-    const siteUrl = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${order.fullname || user?.fullname}</strong>,</p>
-        <p>Chúng tôi tiếc rằng đơn hàng <strong>#${order.id}</strong> đã bị hủy.</p>
+        <p>Chúng tôi tiếc rằng đơn hàng <strong>#${orderId}</strong> đã bị hủy.</p>
         <p>Nếu bạn có thắc mắc hoặc cần hỗ trợ thêm, hãy liên hệ với chúng tôi bất cứ lúc nào.</p>
     `;
 
@@ -436,7 +445,7 @@ const sendOrderCancelledEmail = async (user, order) => {
         title,
         subtitle,
         bodyContentHtml,
-        ctaUrl: `${siteUrl}/products`,
+        ctaUrl: `${SITE_URL}/products`,
         ctaText: "Tiếp Tục Mua Sắm"
     });
 

@@ -211,7 +211,18 @@ const getOrderById = async (req, res) => {
         res.json({
             success: true,
             order,
-            items: itemsResult.rows
+            items: itemsResult.rows,
+            payment: {
+                method: order.payment_method,
+                status: order.payment_status
+            },
+            shipping: {
+                receiver: order.fullname,
+                phone: order.phone,
+                address: order.address,
+                note: order.note
+            },
+            status: order.order_status
         });
 
     } catch (err) {
