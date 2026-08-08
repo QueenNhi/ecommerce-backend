@@ -5,8 +5,12 @@ const {
     getPromotions,
     createPromotion,
     updatePromotion,
-    deletePromotion
+    deletePromotion,
+    validateCoupon
 } = require("../controllers/promotionController");
+
+// POST /api/promotions/validate
+router.post("/validate", validateCoupon);
 
 // GET /api/admin/promotions
 router.get("/", getPromotions);

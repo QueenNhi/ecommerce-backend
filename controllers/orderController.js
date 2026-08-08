@@ -21,7 +21,11 @@ const createOrder = async (req, res) => {
             email,
             address,
             payment_method = "cod",
-            note = ""
+            note = "",
+            discount = 0,
+            discount_amount = 0,
+            coupon_code = "",
+            total: clientTotal
         } = req.body;
 
         if (!fullname || !phone || !address) {
@@ -100,14 +104,25 @@ const createOrder = async (req, res) => {
 
         const items = itemsResult.rows;
 
-        // 3. Calculate total
-        const totalPrice = items.reduce(
+        // 3. Calculate total with discount
+        const subtotalPrice = items.reduce(
             (sum, item) => sum + Number(item.price) * Number(item.quantity),
             0
         );
 
+        const discountVal = Math.max(0, Number(discount || discount_amount || 0));
+        let totalPrice = Math.max(0, subtotalPrice - discountVal);
+
+        if (typeof clientTotal === "number" && clientTotal >= 0 && clientTotal < subtotalPrice) {
+            totalPrice = clientTotal;
+        }
+
         const fullAddress = `${address}`;
         const initialPaymentStatus = payment_method === "vnpay" ? "unpaid" : (payment_method === "bank_transfer" ? "unpaid" : "unpaid");
+
+        const orderNote = coupon_code 
+            ? `${note ? note + " | " : ""}Mã giảm giá: ${coupon_code} (-${discountVal.toLocaleString("vi-VN")}₫)`
+            : note;
 
         // 4. Insert order using numericUserId (INTEGER)
         const orderResult = await db.query(
@@ -116,7 +131,7 @@ const createOrder = async (req, res) => {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', NOW())
             RETURNING id, user_id, fullname, phone, address, total_price, payment_method, payment_status, created_at
             `,
-            [numericUserId, fullname, phone, fullAddress, note, totalPrice, payment_method, initialPaymentStatus]
+            [numericUserId, fullname, phone, fullAddress, orderNote, totalPrice, payment_method, initialPaymentStatus]
         );
 
         const order = orderResult.rows[0];

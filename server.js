@@ -84,8 +84,9 @@ app.use("/api/admin", adminRoutes);
 const paymentRoutes = require("./routes/paymentRoutes");
 app.use("/api/payment", paymentRoutes);
 
-// Admin Promotions & Reviews
+// Admin & Public Promotions & Coupons
 const promotionRoutes = require("./routes/promotionRoutes");
+app.use("/api/promotions", promotionRoutes);
 app.use("/api/admin/promotions", promotionRoutes);
 app.use("/api/admin/coupons", promotionRoutes);
 

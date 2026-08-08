@@ -1,7 +1,17 @@
 require("dotenv").config();
 const nodemailer = require("nodemailer");
 
-const SITE_URL = process.env.FRONTEND_URL || "https://ecommerce-project-2qxq.vercel.app";
+const getBaseUrl = () => {
+    const rawUrl = process.env.CLIENT_URL ||
+        process.env.FRONTEND_URL ||
+        process.env.APP_URL ||
+        (process.env.VERCEL_URL ? (process.env.VERCEL_URL.startsWith("http") ? process.env.VERCEL_URL : `https://${process.env.VERCEL_URL}`) : "") ||
+        "https://ecommerce-project-2qxq.vercel.app";
+
+    return rawUrl.trim().replace(/\/+$/, "");
+};
+
+const SITE_URL = getBaseUrl();
 
 const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
 const smtpPort = Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 587;
@@ -60,6 +70,7 @@ transporter.verify((err, success) => {
  */
 const buildLuxuryEmailTemplate = ({ title, subtitle, bodyContentHtml, ctaUrl, ctaText }) => {
     const year = new Date().getFullYear();
+    const currentSiteUrl = getBaseUrl();
 
     return `
     <!DOCTYPE html>
@@ -101,14 +112,14 @@ const buildLuxuryEmailTemplate = ({ title, subtitle, bodyContentHtml, ctaUrl, ct
             <div class="content">
                 ${bodyContentHtml}
                 ${ctaUrl && ctaText ? `
-                    <div class="cta-wrapper">
-                        <a href="${ctaUrl}" class="btn-cta">${ctaText}</a>
+                    <div class="cta-wrapper" style="text-align: center; margin: 30px 0;">
+                        <a href="${ctaUrl}" target="_blank" rel="noopener noreferrer" class="btn-cta" style="display: inline-block; padding: 14px 32px; background-color: #8b6b2d; color: #ffffff !important; text-decoration: none !important; font-weight: 700; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; border-radius: 8px; box-shadow: 0 4px 15px rgba(139,107,45,0.3);">${ctaText}</a>
                     </div>
                 ` : ""}
             </div>
             <div class="footer">
                 <p>&copy; ${year} Heritage Luxury Portfolio. All rights reserved.</p>
-                <p>Khám phá sản phẩm cao cấp tại <a href="${SITE_URL}">${SITE_URL}</a></p>
+                <p>Khám phá sản phẩm cao cấp tại <a href="${currentSiteUrl}" target="_blank" rel="noopener noreferrer" style="color: #8b6b2d; text-decoration: underline;">${currentSiteUrl}</a></p>
             </div>
         </div>
     </body>
@@ -171,6 +182,7 @@ const sendMail = async ({ to, subject, html }) => {
 const sendWelcomeEmail = async (user) => {
     const title = "Chào Mừng Quý Khách Đăng Ký Tài Khoản";
     const subtitle = "Khám phá di sản nghệ thuật may túi xách thủ công độc bản";
+    const baseUrl = getBaseUrl();
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${user.fullname || "Quý khách"}</strong>,</p>
@@ -182,7 +194,7 @@ const sendWelcomeEmail = async (user) => {
         title,
         subtitle,
         bodyContentHtml,
-        ctaUrl: `${SITE_URL}/products`,
+        ctaUrl: `${baseUrl}/products`,
         ctaText: "Khám Phá Bộ Sưu Tập Ngay"
     });
 
@@ -199,13 +211,18 @@ const sendWelcomeEmail = async (user) => {
 const sendForgotPasswordEmail = async (user, resetToken) => {
     const title = "Yêu Cầu Đặt Lại Mật Khẩu";
     const subtitle = "Liên kết có hiệu lực trong vòng 60 phút";
-    const resetUrl = `${SITE_URL}/reset-password?token=${resetToken}`;
+    const baseUrl = getBaseUrl();
+    const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
     const bodyContentHtml = `
         <p>Xin chào <strong>${user.fullname || "Quý khách"}</strong>,</p>
         <p>Chúng tôi đã nhận được yêu cầu đặt lại mật khẩu cho tài khoản liên kết với email <strong>${user.email}</strong>.</p>
         <p>Nhấp vào nút bên dưới để tiến hành thiết lập mật khẩu mới an toàn:</p>
-        <p style="font-size: 12px; color: #64748b;">Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email này.</p>
+        <p style="font-size: 13px; color: #64748b; margin-top: 16px; word-break: break-all;">
+            Hoặc sao chép và dán liên kết sau trực tiếp vào trình duyệt:<br />
+            <a href="${resetUrl}" target="_blank" rel="noopener noreferrer" style="color: #8b6b2d; text-decoration: underline; font-weight: 600;">${resetUrl}</a>
+        </p>
+        <p style="font-size: 12px; color: #94a3b8; margin-top: 20px;">Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email này.</p>
     `;
 
     const html = buildLuxuryEmailTemplate({
