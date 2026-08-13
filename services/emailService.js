@@ -21,22 +21,25 @@ const defaultFrom = process.env.EMAIL_FROM || (smtpUser ? `"Heritage Luxury Hand
 
 console.log(`📧 Nodemailer SMTP initialized — Host: ${smtpHost}:${smtpPort}, User: ${smtpUser ? smtpUser : '(not set)'}, Pass length: ${smtpPass ? smtpPass.length : 0}`);
 
-// Configure Transporter with Gmail SMTP
-const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
+const isSecure = smtpPort === 465;
 
-    family: 4, // Ép dùng IPv4
+// Configure Transporter with Gmail SMTP (Optimized for Cloud Servers like Render)
+const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: isSecure,
+    requireTLS: !isSecure,
+
+    family: 4, // Ép dùng IPv4 tránh IPv6 ENETUNREACH timeout
 
     auth: {
         user: smtpUser,
         pass: smtpPass
     },
 
-    connectionTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 15000,
 
     pool: true,
     maxConnections: 5,
