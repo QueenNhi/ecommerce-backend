@@ -26,10 +26,12 @@ const register = async (req, res) => {
             });
         }
 
+        const cleanEmail = String(email || "").toLowerCase().trim();
+
         // Kiểm tra email tồn tại
         const checkUser = await pool.query(
-            "SELECT * FROM users WHERE email = $1",
-            [email]
+            "SELECT * FROM users WHERE LOWER(email) = $1",
+            [cleanEmail]
         );
 
         if (checkUser.rows.length > 0) {
@@ -74,7 +76,7 @@ const register = async (req, res) => {
             `,
             [
                 fullname,
-                email,
+                cleanEmail,
                 phone,
                 hashedPassword
             ]
@@ -117,9 +119,11 @@ const login = async (req, res) => {
             password
         } = req.body;
 
+        const cleanEmail = String(email || "").toLowerCase().trim();
+
         const result = await pool.query(
-            "SELECT * FROM users WHERE email=$1",
-            [email]
+            "SELECT * FROM users WHERE LOWER(email) = $1",
+            [cleanEmail]
         );
 
         if (result.rows.length === 0) {
@@ -130,7 +134,7 @@ const login = async (req, res) => {
 
         const user = result.rows[0];
         const isMatch = await bcrypt.compare(
-            password,
+            String(password || ""),
             user.password
         );
 
@@ -204,7 +208,9 @@ const forgotPassword = async (req, res) => {
             });
         }
 
-        const result = await pool.query("SELECT id, fullname, email FROM users WHERE email = $1", [email.toLowerCase().trim()]);
+        const cleanEmail = String(email || "").toLowerCase().trim();
+
+        const result = await pool.query("SELECT id, fullname, email FROM users WHERE LOWER(email) = $1", [cleanEmail]);
         if (result.rows.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -250,7 +256,10 @@ const resetPassword = async (req, res) => {
     try {
         const { token, newPassword } = req.body;
 
-        if (!token || !newPassword) {
+        const cleanToken = String(token || "").trim();
+        const cleanPassword = String(newPassword || "").trim();
+
+        if (!cleanToken || !cleanPassword) {
             return res.status(400).json({
                 success: false,
                 message: "Thiếu mã xác nhận hoặc mật khẩu mới."
@@ -263,7 +272,7 @@ const resetPassword = async (req, res) => {
             FROM users
             WHERE reset_password_token = $1 AND reset_password_expires > NOW()
             `,
-            [token]
+            [cleanToken]
         );
 
         if (result.rows.length === 0) {
@@ -274,7 +283,7 @@ const resetPassword = async (req, res) => {
         }
 
         const user = result.rows[0];
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const hashedPassword = await bcrypt.hash(cleanPassword, 10);
 
         await pool.query(
             `

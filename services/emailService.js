@@ -56,8 +56,7 @@ transporter.verify((err, success) => {
     console.log("User:", smtpUser);
 
     if (err) {
-        console.error("❌ SMTP VERIFY FAILED");
-        console.error(err);
+        console.log("⚠️ SMTP VERIFY WARNING:", err.message || err.code || err);
     } else {
         console.log("✅ SMTP READY");
     }
