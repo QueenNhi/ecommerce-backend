@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const upload = require("../middleware/upload");
+const { verifyToken, verifyAdmin } = require("../middleware/authMiddleware");
 
 const {
     getProducts,
@@ -19,17 +20,19 @@ const {
 
 const { getProductReviews, addProductReview } = require("../controllers/reviewController");
 
-// ================= HOME =================
+// ================= HOME & PUBLIC =================
 router.get("/", getProducts);
 
 // ================= SHOP (Đưa các route tĩnh lên TRƯỚC :id) =================
 router.get("/all", getAllProducts);
 router.get("/filter", filterProducts);
-router.get("/export", exportProducts);
+router.get("/export", verifyToken, verifyAdmin, exportProducts);
 
-// ================= CREATE =================
+// ================= CREATE (ADMIN) =================
 router.post(
     "/",
+    verifyToken,
+    verifyAdmin,
     upload.single("image"),
     createProduct
 );
@@ -40,19 +43,21 @@ router.get("/:id/images", getProductImages);
 router.get("/:id/colors", getProductColors);
 router.get("/:id/sizes", getProductSizes);
 router.get("/:id/reviews", getProductReviews);
-router.post("/:id/reviews", addProductReview);
+router.post("/:id/reviews", verifyToken, addProductReview);
 
 // Cuối cùng mới đến route get theo ID chung
 router.get("/:id", getProductById);
 
-// ================= UPDATE =================
+// ================= UPDATE (ADMIN) =================
 router.put(
     "/:id",
+    verifyToken,
+    verifyAdmin,
     upload.single("image"),
     updateProduct
 );
 
-// ================= DELETE =================
-router.delete("/:id", deleteProduct);
+// ================= DELETE (ADMIN) =================
+router.delete("/:id", verifyToken, verifyAdmin, deleteProduct);
 
 module.exports = router;

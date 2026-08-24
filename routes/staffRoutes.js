@@ -14,6 +14,7 @@
 
 const express = require("express");
 const router = express.Router();
+const { verifyToken, verifyAdmin } = require("../middleware/authMiddleware");
 
 const {
     getStaff,
@@ -24,6 +25,9 @@ const {
     updateStaffStatus,
     resetStaffPassword
 } = require("../controllers/staffController");
+
+// Yêu cầu xác thực và quyền Admin cho tất cả các endpoint quản lý nhân viên
+router.use(verifyToken, verifyAdmin);
 
 // GET    /api/admin/staff
 router.get("/", getStaff);
@@ -47,3 +51,4 @@ router.patch("/:id/status", updateStaffStatus);
 router.patch("/:id/reset-password", resetStaffPassword);
 
 module.exports = router;
+

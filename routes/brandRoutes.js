@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const upload = require("../middleware/upload");
+const { verifyToken, verifyAdmin } = require("../middleware/authMiddleware");
 
 const {
     getBrands,
@@ -9,16 +10,16 @@ const {
     deleteBrand
 } = require("../controllers/brandController");
 
-// GET /api/brands - Get all brands
+// GET /api/brands - Công khai danh sách thương hiệu
 router.get("/", getBrands);
 
-// POST /api/brands - Create brand with logo upload
-router.post("/", upload.single("logo"), createBrand);
+// POST /api/brands - Tạo thương hiệu mới (Admin)
+router.post("/", verifyToken, verifyAdmin, upload.single("logo"), createBrand);
 
-// PUT /api/brands/:id - Update brand
-router.put("/:id", upload.single("logo"), updateBrand);
+// PUT /api/brands/:id - Cập nhật thương hiệu (Admin)
+router.put("/:id", verifyToken, verifyAdmin, upload.single("logo"), updateBrand);
 
-// DELETE /api/brands/:id - Delete brand
-router.delete("/:id", deleteBrand);
+// DELETE /api/brands/:id - Xóa thương hiệu (Admin)
+router.delete("/:id", verifyToken, verifyAdmin, deleteBrand);
 
 module.exports = router;

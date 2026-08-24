@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const { verifyToken, verifyAdmin } = require("../middleware/authMiddleware");
 
 const {
     getPromotions,
@@ -9,19 +10,14 @@ const {
     validateCoupon
 } = require("../controllers/promotionController");
 
-// POST /api/promotions/validate
+// POST /api/promotions/validate (Công khai cho khách hàng)
 router.post("/validate", validateCoupon);
 
-// GET /api/admin/promotions
-router.get("/", getPromotions);
-
-// POST /api/admin/promotions
-router.post("/", createPromotion);
-
-// PUT /api/admin/promotions/:id
-router.put("/:id", updatePromotion);
-
-// DELETE /api/admin/promotions/:id
-router.delete("/:id", deletePromotion);
+// Tất cả các route quản trị khuyến mãi bên dưới bắt buộc phải có verifyToken & verifyAdmin
+router.get("/", verifyToken, verifyAdmin, getPromotions);
+router.post("/", verifyToken, verifyAdmin, createPromotion);
+router.put("/:id", verifyToken, verifyAdmin, updatePromotion);
+router.delete("/:id", verifyToken, verifyAdmin, deletePromotion);
 
 module.exports = router;
+
