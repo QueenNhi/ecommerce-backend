@@ -73,7 +73,7 @@ const deleteReview = async (req, res) => {
 // ======================================
 const getProductReviews = async (req, res) => {
     try {
-        const { productId } = req.params;
+        const productId = req.params.id;
         const result = await db.query(
             `
             SELECT 
@@ -103,11 +103,15 @@ const getProductReviews = async (req, res) => {
         );
 
         const stats = statsResult.rows[0];
+        const totalReviews = parseInt(stats.total_reviews, 10) || 0;
+        
+        // Sửa lỗi: Nếu không có review nào thì averageRating = 0
+        const averageRating = totalReviews === 0 ? 0 : (parseFloat(stats.average_rating) || 0);
 
         res.json({
             success: true,
-            averageRating: parseFloat(stats.average_rating) || 5.0,
-            totalReviews: parseInt(stats.total_reviews, 10) || 0,
+            averageRating: averageRating,
+            totalReviews: totalReviews,
             reviews: result.rows
         });
     } catch (err) {
@@ -129,7 +133,7 @@ const getProductReviews = async (req, res) => {
 // ======================================
 const addProductReview = async (req, res) => {
     try {
-        const { productId } = req.params;
+        const productId = req.params.id;
         const { user_id = 1, rating = 5, comment = "" } = req.body;
 
         if (!rating || rating < 1 || rating > 5) {

@@ -13,6 +13,9 @@ const {
 // POST /api/promotions/validate (Công khai cho khách hàng)
 router.post("/validate", validateCoupon);
 
+// GET /api/promotions/public (Công khai lấy danh sách khuyến mãi)
+router.get("/public", getPromotions);
+
 // Tất cả các route quản trị khuyến mãi bên dưới bắt buộc phải có verifyToken & verifyAdmin
 router.get("/", verifyToken, verifyAdmin, getPromotions);
 router.post("/", verifyToken, verifyAdmin, createPromotion);
