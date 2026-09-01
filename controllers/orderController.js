@@ -124,14 +124,37 @@ const createOrder = async (req, res) => {
             ? `${note ? note + " | " : ""}Mã giảm giá: ${coupon_code} (-${discountVal.toLocaleString("vi-VN")}₫)`
             : note;
 
+        if (coupon_code && numericUserId) {
+            const promoCheck = await db.query(
+                `SELECT usage_limit_per_user FROM promotions WHERE UPPER(code) = $1 AND status = 'active'`,
+                [coupon_code.toUpperCase()]
+            );
+            
+            if (promoCheck.rows.length > 0) {
+                const usageLimit = promoCheck.rows[0].usage_limit_per_user || 1;
+                const usageResult = await db.query(
+                    `SELECT COUNT(*) FROM orders 
+                     WHERE user_id = $1 AND (coupon_code = $2 OR note LIKE '%' || $2 || '%') AND order_status != 'cancelled'`,
+                    [numericUserId, coupon_code.toUpperCase()]
+                );
+                
+                if (parseInt(usageResult.rows[0].count, 10) >= usageLimit) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Bạn đã hết lượt sử dụng mã ưu đãi này. Vui lòng bỏ mã giảm giá để tiếp tục."
+                    });
+                }
+            }
+        }
+
         // 4. Insert order using numericUserId (INTEGER)
         const orderResult = await db.query(
             `
-            INSERT INTO orders (user_id, fullname, phone, address, note, total_price, payment_method, payment_status, order_status, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', NOW())
+            INSERT INTO orders (user_id, fullname, phone, address, note, total_price, payment_method, payment_status, order_status, created_at, coupon_code)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', NOW(), $9)
             RETURNING id, user_id, fullname, phone, address, total_price, payment_method, payment_status, created_at
             `,
-            [numericUserId, fullname, phone, fullAddress, orderNote, totalPrice, payment_method, initialPaymentStatus]
+            [numericUserId, fullname, phone, fullAddress, orderNote, totalPrice, payment_method, initialPaymentStatus, (coupon_code || '').toUpperCase() || null]
         );
 
         const order = orderResult.rows[0];
@@ -159,6 +182,17 @@ const createOrder = async (req, res) => {
 
         // Trigger Order Placed Email Notification
         sendOrderCreatedEmail(userObj, order, items);
+
+        // CREATE ADMIN NOTIFICATION
+        try {
+            await db.query(
+                `INSERT INTO admin_notifications (type, reference_id, message) 
+                 VALUES ($1, $2, $3)`,
+                ['new_order', order.id, `Có đơn hàng mới #LX-${order.id} từ khách hàng ${fullname}`]
+            );
+        } catch (notiErr) {
+            console.error("Lỗi tạo thông báo admin (đơn hàng vẫn tạo thành công):", notiErr);
+        }
 
         res.status(201).json({
             success: true,

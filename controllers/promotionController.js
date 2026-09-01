@@ -28,37 +28,39 @@ const getPromotions = async (req, res) => {
 // ======================================
 const createPromotion = async (req, res) => {
     try {
-        const {
-            code,
-            discount_percent = 0,
-            discount_amount = 0,
-            min_order_amount = 0,
-            expiration_date,
-            status = "active"
-        } = req.body;
-
-        if (!code || code.trim() === "") {
-            return res.status(400).json({
-                success: false,
-                message: "Mã khuyến mãi không được để trống."
-            });
-        }
-
-        const result = await db.query(
-            `
-            INSERT INTO promotions (code, discount_percent, discount_amount, min_order_amount, expiration_date, status, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, NOW())
-            RETURNING *
-            `,
-            [
-                code.trim().toUpperCase(),
-                Number(discount_percent) || 0,
-                Number(discount_amount) || 0,
-                Number(min_order_amount) || 0,
-                expiration_date || null,
-                status.toLowerCase()
-            ]
-        );
+            const {
+                code,
+                discount_percent = 0,
+                discount_amount = 0,
+                min_order_amount = 0,
+                expiration_date,
+                usage_limit_per_user = 1,
+                status = "active"
+            } = req.body;
+    
+            if (!code || code.trim() === "") {
+                return res.status(400).json({
+                    success: false,
+                    message: "Mã khuyến mãi không được để trống."
+                });
+            }
+    
+            const result = await db.query(
+                `
+                INSERT INTO promotions (code, discount_percent, discount_amount, min_order_amount, expiration_date, usage_limit_per_user, status, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                RETURNING *
+                `,
+                [
+                    code.trim().toUpperCase(),
+                    Number(discount_percent) || 0,
+                    Number(discount_amount) || 0,
+                    Number(min_order_amount) || 0,
+                    expiration_date || null,
+                    Number(usage_limit_per_user) || 1,
+                    status.toLowerCase()
+                ]
+            );
 
         res.status(201).json({
             success: true,
@@ -87,39 +89,41 @@ const createPromotion = async (req, res) => {
 const updatePromotion = async (req, res) => {
     try {
         const { id } = req.params;
-        const {
-            code,
-            discount_percent = 0,
-            discount_amount = 0,
-            min_order_amount = 0,
-            expiration_date,
-            status = "active"
-        } = req.body;
-
-        if (!code || code.trim() === "") {
-            return res.status(400).json({
-                success: false,
-                message: "Mã khuyến mãi không được để trống."
-            });
-        }
-
-        const result = await db.query(
-            `
-            UPDATE promotions
-            SET code = $1, discount_percent = $2, discount_amount = $3, min_order_amount = $4, expiration_date = $5, status = $6
-            WHERE id = $7
-            RETURNING *
-            `,
-            [
-                code.trim().toUpperCase(),
-                Number(discount_percent) || 0,
-                Number(discount_amount) || 0,
-                Number(min_order_amount) || 0,
-                expiration_date || null,
-                status.toLowerCase(),
-                id
-            ]
-        );
+            const {
+                code,
+                discount_percent = 0,
+                discount_amount = 0,
+                min_order_amount = 0,
+                expiration_date,
+                usage_limit_per_user = 1,
+                status = "active"
+            } = req.body;
+    
+            if (!code || code.trim() === "") {
+                return res.status(400).json({
+                    success: false,
+                    message: "Mã khuyến mãi không được để trống."
+                });
+            }
+    
+            const result = await db.query(
+                `
+                UPDATE promotions
+                SET code = $1, discount_percent = $2, discount_amount = $3, min_order_amount = $4, expiration_date = $5, usage_limit_per_user = $6, status = $7
+                WHERE id = $8
+                RETURNING *
+                `,
+                [
+                    code.trim().toUpperCase(),
+                    Number(discount_percent) || 0,
+                    Number(discount_amount) || 0,
+                    Number(min_order_amount) || 0,
+                    expiration_date || null,
+                    Number(usage_limit_per_user) || 1,
+                    status.toLowerCase(),
+                    id
+                ]
+            );
 
         if (result.rows.length === 0) {
             return res.status(404).json({
@@ -178,7 +182,7 @@ const deletePromotion = async (req, res) => {
 // ======================================
 const validateCoupon = async (req, res) => {
     try {
-        const { code, totalAmount = 0 } = req.body;
+        const { code, totalAmount = 0, user_id } = req.body;
 
         if (!code || !code.trim()) {
             return res.status(400).json({
@@ -215,6 +219,23 @@ const validateCoupon = async (req, res) => {
                 success: false,
                 message: `Đơn hàng tối thiểu ${Number(promo.min_order_amount).toLocaleString("vi-VN")}₫ mới có thể áp dụng mã này.`
             });
+        }
+
+        if (user_id) {
+            const usageResult = await db.query(
+                `SELECT COUNT(*) FROM orders 
+                 WHERE user_id = $1 AND (coupon_code = $2 OR note LIKE '%' || $2 || '%') AND order_status != 'cancelled'`,
+                [user_id, upperCode]
+            );
+            const usedCount = parseInt(usageResult.rows[0].count, 10);
+            const usageLimit = promo.usage_limit_per_user || 1;
+            
+            if (usedCount >= usageLimit) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Bạn đã hết lượt sử dụng mã ưu đãi này."
+                });
+            }
         }
 
         let calculatedDiscount = 0;

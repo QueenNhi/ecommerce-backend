@@ -80,6 +80,10 @@ app.use("/api/auth", authRoutes);
 const adminRoutes = require("./routes/adminRoutes");
 app.use("/api/admin", adminRoutes);
 
+// Admin Notifications
+const notificationRoutes = require("./routes/notificationRoutes");
+app.use("/api/admin/notifications", notificationRoutes);
+
 // Payment Routes (VNPAY & Banking)
 const paymentRoutes = require("./routes/paymentRoutes");
 app.use("/api/payment", paymentRoutes);
