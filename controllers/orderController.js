@@ -13,6 +13,7 @@ const {
 // POST /api/orders
 // ======================================
 const createOrder = async (req, res) => {
+    const client = await db.getClient(); // Lấy client cho transaction
     try {
         const {
             user_id = 1,
@@ -44,11 +45,11 @@ const createOrder = async (req, res) => {
             console.warn(`⚠️ Warning: non-integer user_id received ('${user_id}'). Resolving integer user.id from PostgreSQL database...`);
             const targetEmail = String(email || "").toLowerCase().trim();
             if (targetEmail) {
-                const userCheck = await db.query("SELECT id FROM users WHERE email = $1", [targetEmail]);
+                const userCheck = await client.query("SELECT id FROM users WHERE email = $1", [targetEmail]);
                 if (userCheck.rows.length > 0) {
                     numericUserId = Number(userCheck.rows[0].id);
                 } else {
-                    const newUser = await db.query(
+                    const newUser = await client.query(
                         `INSERT INTO users (fullname, email, phone, password, role, status, avatar, address)
                          VALUES ($1, $2, $3, '', 'customer', 'active', '', '')
                          RETURNING id`,
@@ -64,7 +65,7 @@ const createOrder = async (req, res) => {
         console.log("✅ Verified PostgreSQL numericUserId for order insertion:", numericUserId, "type:", typeof numericUserId);
 
         // 1. Get user cart
-        const cartResult = await db.query(
+        const cartResult = await client.query(
             "SELECT id FROM cart WHERE user_id = $1 OR user_id = $2",
             [String(user_id), String(numericUserId)]
         );
@@ -79,7 +80,7 @@ const createOrder = async (req, res) => {
         const cartId = cartResult.rows[0].id;
 
         // 2. Get cart items
-        const itemsResult = await db.query(
+        const itemsResult = await client.query(
             `
             SELECT 
                 cart_items.product_id,
@@ -87,7 +88,8 @@ const createOrder = async (req, res) => {
                 cart_items.size_id,
                 cart_items.quantity,
                 products.name,
-                products.price
+                products.price,
+                products.stock_quantity
             FROM cart_items
             JOIN products ON cart_items.product_id = products.id
             WHERE cart_items.cart_id = $1
@@ -103,6 +105,31 @@ const createOrder = async (req, res) => {
         }
 
         const items = itemsResult.rows;
+
+        // ★ Kiểm tra tồn kho trước khi tạo đơn hàng
+        const outOfStockItems = [];
+        for (const item of items) {
+            const available = Number(item.stock_quantity) || 0;
+            const ordered = Number(item.quantity) || 0;
+            if (available < ordered) {
+                outOfStockItems.push({
+                    name: item.name,
+                    available,
+                    ordered
+                });
+            }
+        }
+
+        if (outOfStockItems.length > 0) {
+            const detail = outOfStockItems
+                .map(i => `"${i.name}" (còn ${i.available}, bạn chọn ${i.ordered})`)
+                .join(", ");
+            return res.status(400).json({
+                success: false,
+                message: `Sản phẩm vượt quá số lượng tồn kho: ${detail}. Vui lòng cập nhật lại giỏ hàng.`,
+                out_of_stock: outOfStockItems
+            });
+        }
 
         // 3. Calculate total with discount
         const subtotalPrice = items.reduce(
@@ -125,14 +152,14 @@ const createOrder = async (req, res) => {
             : note;
 
         if (coupon_code && numericUserId) {
-            const promoCheck = await db.query(
+            const promoCheck = await client.query(
                 `SELECT usage_limit_per_user FROM promotions WHERE UPPER(code) = $1 AND status = 'active'`,
                 [coupon_code.toUpperCase()]
             );
             
             if (promoCheck.rows.length > 0) {
                 const usageLimit = promoCheck.rows[0].usage_limit_per_user || 1;
-                const usageResult = await db.query(
+                const usageResult = await client.query(
                     `SELECT COUNT(*) FROM orders 
                      WHERE user_id = $1 AND (coupon_code = $2 OR note LIKE '%' || $2 || '%') AND order_status != 'cancelled'`,
                     [numericUserId, coupon_code.toUpperCase()]
@@ -147,8 +174,11 @@ const createOrder = async (req, res) => {
             }
         }
 
+        // ★ Bắt đầu Transaction
+        await client.query("BEGIN");
+
         // 4. Insert order using numericUserId (INTEGER)
-        const orderResult = await db.query(
+        const orderResult = await client.query(
             `
             INSERT INTO orders (user_id, fullname, phone, address, note, total_price, payment_method, payment_status, order_status, created_at, coupon_code)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', NOW(), $9)
@@ -161,7 +191,7 @@ const createOrder = async (req, res) => {
 
         // 5. Insert order items
         for (const item of items) {
-            await db.query(
+            await client.query(
                 `
                 INSERT INTO order_items (order_id, product_id, color_id, size_id, quantity, price)
                 VALUES ($1, $2, $3, $4, $5, $6)
@@ -170,11 +200,24 @@ const createOrder = async (req, res) => {
             );
         }
 
-        // 6. Clear cart items
-        await db.query(
+        // ★ 6. Trừ số lượng tồn kho sau khi đặt hàng thành công
+        for (const item of items) {
+            await client.query(
+                `UPDATE products
+                 SET stock_quantity = GREATEST(0, stock_quantity - $1)
+                 WHERE id = $2`,
+                [Number(item.quantity), item.product_id]
+            );
+        }
+
+        // 7. Clear cart items
+        await client.query(
             "DELETE FROM cart_items WHERE cart_id = $1",
             [cartId]
         );
+
+        // ★ Commit transaction
+        await client.query("COMMIT");
 
         // Fetch user email for email notification
         const userRes = await db.query("SELECT id, fullname, email FROM users WHERE id = $1", [numericUserId]);
@@ -202,11 +245,14 @@ const createOrder = async (req, res) => {
         });
 
     } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
         console.error("Create order error:", err);
         res.status(500).json({
             success: false,
             message: err.message || "Lỗi tạo đơn hàng."
         });
+    } finally {
+        client.release();
     }
 };
 
@@ -361,6 +407,28 @@ const updateOrderStatus = async (req, res) => {
         }
 
         const updatedOrder = result.rows[0];
+
+        // ★ Hoàn lại tồn kho nếu hủy đơn hàng
+        if (lowerStatus === "cancelled") {
+            try {
+                const orderItems = await db.query(
+                    `SELECT product_id, quantity FROM order_items WHERE order_id = $1`,
+                    [id]
+                );
+                for (const item of orderItems.rows) {
+                    await db.query(
+                        `UPDATE products
+                         SET stock_quantity = stock_quantity + $1
+                         WHERE id = $2`,
+                        [Number(item.quantity), item.product_id]
+                    );
+                }
+                console.log(`✅ Đã hoàn lại tồn kho cho đơn hàng #${id} (${orderItems.rows.length} sản phẩm)`);
+            } catch (stockErr) {
+                console.error("Lỗi hoàn lại tồn kho khi hủy đơn:", stockErr);
+                // Không throw lỗi - đơn hàng vẫn được cập nhật trạng thái
+            }
+        }
 
         // Fetch user email for trigger notification
         const userRes = await db.query("SELECT id, fullname, email FROM users WHERE id = $1", [updatedOrder.user_id]);

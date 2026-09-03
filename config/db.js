@@ -70,4 +70,8 @@ if (process.env.NODE_ENV !== "production") {
     })();
 }
 
+// Export pool directly — pool.query, pool.connect etc. are already available
+// via module.exports since module.exports IS the pool object.
+// We only add getClient() as a named helper for transaction support.
 module.exports = pool;
+module.exports.getClient = () => pool.connect();

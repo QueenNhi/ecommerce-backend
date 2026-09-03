@@ -72,8 +72,36 @@ const verifyAdmin = (req, res, next) => {
     next();
 };
 
+// Middleware kiểm tra quyền Admin hoặc Warehouse Staff (quản lý kho)
+const verifyAdminOrWarehouse = (req, res, next) => {
+    if (!req.user) {
+        return res.status(401).json({
+            success: false,
+            message: "Unauthorized: Người dùng chưa được xác thực."
+        });
+    }
+
+    const role = (req.user.role || "").toLowerCase();
+    const allowed = [
+        "admin",
+        "manager",
+        "warehouse_staff",
+        "warehouse"
+    ];
+
+    if (!allowed.includes(role) && !req.user.isAdmin && !req.user.is_admin) {
+        return res.status(403).json({
+            success: false,
+            message: "Forbidden: Bạn không có quyền quản lý kho hàng."
+        });
+    }
+
+    next();
+};
+
 // Xuất mặc định là verifyToken cho khả năng tương thích ngược
 module.exports = verifyToken;
 module.exports.verifyToken = verifyToken;
 module.exports.verifyAdmin = verifyAdmin;
-module.exports.checkRole = checkRole;
+module.exports.verifyAdminOrWarehouse = verifyAdminOrWarehouse;
+module.exports.checkRole = checkRole;

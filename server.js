@@ -108,6 +108,10 @@ app.use("/api/admin/collections", collectionRoutes);
 const staffRoutes = require("./routes/staffRoutes");
 app.use("/api/admin/staff", staffRoutes);
 
+// Inventory Management
+const inventoryRoutes = require("./routes/inventoryRoutes");
+app.use("/api/admin/inventory", inventoryRoutes);
+
 // =====================================
 // 404
 // =====================================
