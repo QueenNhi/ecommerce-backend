@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const { verifyToken } = require("../middleware/authMiddleware");
 
 const {
     createVnpayUrl,
@@ -7,8 +8,8 @@ const {
     vnpayIpn
 } = require("../controllers/paymentController");
 
-// POST /api/payment/vnpay_create_url
-router.post("/vnpay_create_url", createVnpayUrl);
+// POST /api/payment/vnpay_create_url (Yêu cầu đăng nhập)
+router.post("/vnpay_create_url", verifyToken, createVnpayUrl);
 
 // GET /api/payment/vnpay_return
 router.get("/vnpay_return", vnpayReturn);

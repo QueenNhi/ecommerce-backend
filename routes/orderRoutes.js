@@ -11,8 +11,8 @@ const {
     getUserOrders
 } = require("../controllers/orderController");
 
-// POST /api/orders - Tạo đơn hàng (Cho phép khách hàng / người dùng đã đăng nhập)
-router.post("/", createOrder);
+// POST /api/orders - Tạo đơn hàng (Yêu cầu đăng nhập)
+router.post("/", verifyToken, createOrder);
 
 // GET /api/orders/admin/all & /all - Lấy toàn bộ đơn hàng (Admin)
 router.get("/admin/all", verifyToken, verifyAdmin, getAllOrders);
